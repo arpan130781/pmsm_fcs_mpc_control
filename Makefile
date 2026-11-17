@@ -1,10 +1,9 @@
 PYTHON ?= python3
 
 CC=gcc
-CFLAGS=-Wall -Wextra -O2 -fPIC
+CFLAGS=-Wall -Wextra -O3 -fPIC
 SRC_DIR=src
 BUILD_DIR=build
-SCENARIO ?= scenario_0_no_fault
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
@@ -13,22 +12,24 @@ else
 	LIB_EXT := so
 endif
 
-LIB_TARGET := $(BUILD_DIR)/libfoc_controller.$(LIB_EXT)
+LIB_TARGET := $(BUILD_DIR)/libmpc_controller.$(LIB_EXT)
+LEGACY_LIB := $(BUILD_DIR)/libfoc_controller.$(LIB_EXT)
 SRCS := $(filter-out $(SRC_DIR)/tests/%, $(wildcard $(SRC_DIR)/*.c))
 
-.PHONY: all lib test pytest test-all clean run run-scenario
+.PHONY: all lib test pytest test-all clean run
 
-all: lib
+all: lib test
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 lib: $(BUILD_DIR)
 	$(CC) $(CFLAGS) -shared $(SRCS) -lm -o $(LIB_TARGET)
+	cp $(LIB_TARGET) $(LEGACY_LIB)
 
 test: lib
-	$(CC) $(CFLAGS) $(SRC_DIR)/tests/test_transforms.c $(SRCS) -lm -o $(BUILD_DIR)/test_transforms
-	./$(BUILD_DIR)/test_transforms
+	$(CC) $(CFLAGS) $(SRC_DIR)/tests/test_mpc.c $(SRCS) -lm -o $(BUILD_DIR)/test_mpc
+	./$(BUILD_DIR)/test_mpc
 
 pytest:
 	$(PYTHON) -m pytest simulation/ -v
@@ -39,7 +40,4 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 run: lib
-	$(PYTHON) simulation/harness/sil_runner.py
-
-run-scenario: lib
-	$(PYTHON) simulation/harness/sil_runner.py --scenario $(SCENARIO)
+	$(PYTHON) simulation/harness/mpc_runner.py

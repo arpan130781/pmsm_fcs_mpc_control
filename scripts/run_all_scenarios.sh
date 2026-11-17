@@ -1,27 +1,16 @@
 #!/bin/bash
-make lib
-scenarios=$(grep '^[a-zA-Z0-9_]*:' simulation/fault_injection/fault_scenarios.yaml | tr -d ':')
+set -e
 
-FAILED=0
-echo "Running standard scenarios..."
-for sc in $scenarios; do
-    echo "---------------------------------------------------------"
-    echo "Running $sc..."
-    if ! ${PYTHON:-.venv/bin/python3} simulation/harness/sil_runner.py --scenario "$sc" --no-plot; then
-        echo "Scenario $sc FAILED!"
-        FAILED=$((FAILED + 1))
-    fi
-done
+echo "=================================================================="
+echo "Running FCS-MPC Power Electronics Drive Benchmark Suite"
+echo "Author: Arpan Kailash Gupta (241030009), VJTI Mumbai"
+echo "=================================================================="
 
-echo "---------------------------------------------------------"
-echo "Running sensor-fault robustness sweep (target: >=90% acceptable outcomes per group)..."
-if ! ${PYTHON:-.venv/bin/python3} scripts/isolation_sweep.py --phases 4; then
-    echo "Sweep did not meet the target."
-    FAILED=$((FAILED + 1))
-fi
+# 1. Compile C library and unit tests
+make all
 
-if [ $FAILED -gt 0 ]; then
-    echo "$FAILED scenarios/tests failed."
-    exit 1
-fi
-echo "All scenarios pass!"
+# 2. Run Python FCS-MPC Simulation Benchmarks
+${PYTHON:-python3} simulation/harness/mpc_runner.py
+
+echo ""
+echo "[COMPLETE] All FCS-MPC benchmarks and unit tests executed successfully!"

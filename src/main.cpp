@@ -1,296 +1,171 @@
-#include <Arduino.h>
-
-/* 
- * Sensorless FOC for ESP32 - Hardware Abstraction Layer (HAL) & Virtual Simulation
- * 
- * Runs a 20kHz hardware timer interrupt executing the sensorless FOC loop.
- * - Hardware Mode: Reads real phase currents from analog shunts.
- * - Simulation/Wokwi Mode (default or GPIO 4 LOW): Emulates PMSM motor physics 
- *   in real-time so the entire sensorless FOC loop can be fully tested in Wokwi
- *   without requiring a physical motor connected.
- * - Fault Injection: Press button on GPIO 15 to inject a sensor offset fault.
- * - Status LEDs: Green (Normal), Yellow (Degraded), Red (Limp / Safe Stop).
+/**
+ * =========================================================================================
+ * Finite-Control-Set Model Predictive Control (FCS-MPC) for PMSM Power Electronics Drive
+ * Department of Electrical Engineering, Veermata Jijabai Technological Institute (VJTI)
+ * Author: Arpan Kailash Gupta (Roll No: 241030009)
+ * Target Hardware: Espressif ESP32 Dev Module (Xtensa Dual-Core 240 MHz)
+ * =========================================================================================
  */
 
-extern "C" {
-    #include "foc_api.h"
-}
+#ifdef ARDUINO
+#include <Arduino.h>
+#include "esp_timer.h"
+#include "esp_cpu.h"
+#include "mpc_api.h"
+#include "motor_params.h"
 
-// ============================================================================
-// HARDWARE PIN DEFINITIONS
-// ============================================================================
-#define PIN_PWM_A           25
-#define PIN_PWM_B           26
-#define PIN_PWM_C           27
+/* Inverter Gate Driver Pin Definitions (Direct GPIO Triggering, No PWM Modulator) */
+#define PIN_GATE_AH     16  /* Phase A High-Side Gate */
+#define PIN_GATE_AL     17  /* Phase A Low-Side Gate (Inverted with dead-time) */
+#define PIN_GATE_BH     18  /* Phase B High-Side Gate */
+#define PIN_GATE_BL     19  /* Phase B Low-Side Gate */
+#define PIN_GATE_CH     21  /* Phase C High-Side Gate */
+#define PIN_GATE_CL     22  /* Phase C Low-Side Gate */
 
-#define PIN_SENSE_A         32
-#define PIN_SENSE_B         33
-#define PIN_SENSE_C         34
+/* Current Shunt ADC Pins */
+#define PIN_ADC_IA      36  /* ADC1_CH0 (Phase A Current) */
+#define PIN_ADC_IB      39  /* ADC1_CH3 (Phase B Current) */
+#define PIN_ADC_IC      34  /* ADC1_CH6 (Phase C Current) */
+#define PIN_ADC_VDC     35  /* ADC1_CH7 (DC-Link Bus Voltage) */
 
-#define PIN_LED_NORMAL      18   // Green LED (Closed loop normal)
-#define PIN_LED_DEGRADED    19   // Yellow LED (Fault isolated, 2-shunt fallback)
-#define PIN_LED_FAULT       21   // Red LED (Limp / Safe Stop)
+/* Optical/Magnetic Quadrature Encoder Pins */
+#define PIN_ENC_A       25
+#define PIN_ENC_B       26
+#define PIN_ENC_Z       27
 
-#define PIN_BTN_FAULT       15   // Pushbutton: Inject sensor fault (Active LOW)
-#define PIN_SW_MODE          4   // Switch: LOW = Virtual Motor, HIGH = Real ADC
+static MPCTelemetry_t g_telemetry;
+static hw_timer_t* g_timer = NULL;
+static portMUX_TYPE g_timer_mux = portMUX_INITIALIZER_UNLOCKED;
 
-// PWM Settings
-#define PWM_FREQ            20000       // 20 kHz
-#define PWM_RESOLUTION      11          // 11-bit resolution (0-2047)
-#define PWM_MAX             ((1 << PWM_RESOLUTION) - 1)
+/* Real-Time Execution Profiling */
+static volatile uint32_t g_last_cycles = 0;
+static volatile uint32_t g_max_cycles = 0;
+static volatile bool g_step_ready = false;
 
-// ADC Settings
-#define ADC_MAX             4095.0f
-#define ADC_VOLTAGE_REF     3.3f
-#define SHUNT_RESISTOR      0.01f       // 10 mOhm
-#define OPAMP_GAIN          50.0f
-#define CURRENT_SCALE       (ADC_VOLTAGE_REF / (ADC_MAX * SHUNT_RESISTOR * OPAMP_GAIN))
-#define ADC_OFFSET          2048.0f     // Center point (1.65V)
+static float g_target_speed_rpm = 1500.0f;
+static float g_measured_speed_rpm = 0.0f;
+static float g_theta_e = 0.0f;
 
-// ============================================================================
-// GLOBALS & STATE
-// ============================================================================
-hw_timer_t *foc_timer = NULL;
-portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
-// Shared telemetry
-volatile float telemetry_theta = 0.0f;
-volatile float telemetry_speed_rpm = 0.0f;
-volatile float telemetry_health = 0.0f;
-volatile int   telemetry_mode = 0;
-volatile float telemetry_ia = 0.0f;
-volatile float telemetry_ib = 0.0f;
-volatile float telemetry_ic = 0.0f;
-#define CYCLES_PER_TICK_BUDGET  12000 // 50 us at 240 MHz
-volatile uint32_t telemetry_cycles = 0;
-volatile uint32_t telemetry_max_cycles = 0;
-volatile uint32_t telemetry_missed_deadlines = 0;
-
-// Motor Parameters
-static const float M_RS    = 0.5f;
-static const float M_LS    = 1.0e-3f;
-static const float M_PSI_F = 0.015f;
-static const int   M_P     = 4;
-static const float M_J     = 0.0001f;
-static const float M_B     = 0.001f;
-static const float M_VBUS  = 24.0f;
-
-// Virtual Motor Plant States (for real-time simulation)
-static float sim_id = 0.0f;
-static float sim_iq = 0.0f;
-static float sim_omega_m = 0.0f;
-static float sim_theta_e = 0.0f;
-
-// ============================================================================
-// 20kHz HARDWARE TIMER ISR
-// ============================================================================
-void IRAM_ATTR foc_isr() {
-    uint32_t t_start = esp_cpu_get_ccount();
-
-    float ia = 0.0f;
-    float ib = 0.0f;
-    float ic = 0.0f;
-
-    bool use_virtual_motor = (digitalRead(PIN_SW_MODE) == LOW);
-    bool inject_fault = (digitalRead(PIN_BTN_FAULT) == LOW);
-
-    if (use_virtual_motor) {
-        // Compute phase currents from virtual PMSM state
-        float c_th = cosf(sim_theta_e);
-        float s_th = sinf(sim_theta_e);
-        float i_alpha = sim_id * c_th - sim_iq * s_th;
-        float i_beta  = sim_id * s_th + sim_iq * c_th;
-
-        ia = i_alpha;
-        ib = -0.5f * i_alpha + 0.8660254f * i_beta;
-        ic = -0.5f * i_alpha - 0.8660254f * i_beta;
-
-        // Interactive fault injection: inject +2.0A bias on Phase A when button pressed
-        if (inject_fault) {
-            ia += 2.0f;
-        }
+/* Apply discrete switching state directly to gate driver pins */
+static inline void IRAM_ATTR apply_inverter_gates(uint8_t sa, uint8_t sb, uint8_t sc) {
+    /* Fast direct GPIO register write on ESP32 */
+    if (sa) {
+        GPIO.out_w1tc = (1 << PIN_GATE_AL);
+        GPIO.out_w1ts = (1 << PIN_GATE_AH);
     } else {
-        // Read external physical ADC shunts
-        float a_raw = analogRead(PIN_SENSE_A);
-        float b_raw = analogRead(PIN_SENSE_B);
-        float c_raw = analogRead(PIN_SENSE_C);
-
-        ia = (a_raw - ADC_OFFSET) * CURRENT_SCALE;
-        ib = (b_raw - ADC_OFFSET) * CURRENT_SCALE;
-        ic = (c_raw - ADC_OFFSET) * CURRENT_SCALE;
+        GPIO.out_w1tc = (1 << PIN_GATE_AH);
+        GPIO.out_w1ts = (1 << PIN_GATE_AL);
     }
-
-    FocInput foc_in = {
-        .i_a = ia,
-        .i_b = ib,
-        .i_c = ic,
-        .v_bus = M_VBUS
-    };
-
-    // Execute FOC Control Step
-    FocOutput foc_out = foc_tick(&foc_in);
-
-    // Apply PWM outputs
-    ledcWrite(0, (uint32_t)(foc_out.duty_a * PWM_MAX));
-    ledcWrite(1, (uint32_t)(foc_out.duty_b * PWM_MAX));
-    ledcWrite(2, (uint32_t)(foc_out.duty_c * PWM_MAX));
-
-    if (use_virtual_motor) {
-        // Advance virtual motor plant by dt = 50 microseconds
-        float dt = 50.0e-6f;
-        float v_a = (foc_out.duty_a - 0.5f) * M_VBUS;
-        float v_b = (foc_out.duty_b - 0.5f) * M_VBUS;
-        float v_c = (foc_out.duty_c - 0.5f) * M_VBUS;
-
-        float v_alpha = (2.0f/3.0f) * (v_a - 0.5f*v_b - 0.5f*v_c);
-        float v_beta  = 0.57735027f * (v_b - v_c);
-
-        float c_th = cosf(sim_theta_e);
-        float s_th = sinf(sim_theta_e);
-        float v_d =  v_alpha * c_th + v_beta * s_th;
-        float v_q = -v_alpha * s_th + v_beta * c_th;
-
-        float omega_e = M_P * sim_omega_m;
-        float di_d = (1.0f / M_LS) * (v_d - M_RS * sim_id + omega_e * M_LS * sim_iq);
-        float di_q = (1.0f / M_LS) * (v_q - M_RS * sim_iq - omega_e * M_LS * sim_id - omega_e * M_PSI_F);
-
-        float t_e = 1.5f * M_P * M_PSI_F * sim_iq;
-        float domega_m = (1.0f / M_J) * (t_e - M_B * sim_omega_m);
-
-        sim_id += di_d * dt;
-        sim_iq += di_q * dt;
-        sim_omega_m += domega_m * dt;
-        sim_theta_e += omega_e * dt;
-
-        while (sim_theta_e > 2.0f * (float)M_PI) sim_theta_e -= 2.0f * (float)M_PI;
-        while (sim_theta_e < 0.0f)              sim_theta_e += 2.0f * (float)M_PI;
+    
+    if (sb) {
+        GPIO.out_w1tc = (1 << PIN_GATE_BL);
+        GPIO.out_w1ts = (1 << PIN_GATE_BH);
+    } else {
+        GPIO.out_w1tc = (1 << PIN_GATE_BH);
+        GPIO.out_w1ts = (1 << PIN_GATE_BL);
     }
-
-    uint32_t t_elapsed = esp_cpu_get_ccount() - t_start;
-
-    // Export telemetry (critical section strictly limited to volatile state copy)
-    portENTER_CRITICAL_ISR(&timerMux);
-    telemetry_cycles = t_elapsed;
-    if (t_elapsed > telemetry_max_cycles) telemetry_max_cycles = t_elapsed;
-    if (t_elapsed > CYCLES_PER_TICK_BUDGET) telemetry_missed_deadlines++;
-
-    telemetry_theta = foc_out.theta_hat;
-    telemetry_speed_rpm = foc_out.omega_hat * (60.0f / (2.0f * (float)M_PI * M_P));
-    telemetry_health = foc_out.health_score;
-    telemetry_mode = foc_out.control_mode;
-    telemetry_ia = ia;
-    telemetry_ib = ib;
-    telemetry_ic = ic;
-    portEXIT_CRITICAL_ISR(&timerMux);
+    
+    if (sc) {
+        GPIO.out_w1tc = (1 << PIN_GATE_CL);
+        GPIO.out_w1ts = (1 << PIN_GATE_CH);
+    } else {
+        GPIO.out_w1tc = (1 << PIN_GATE_CH);
+        GPIO.out_w1ts = (1 << PIN_GATE_CL);
+    }
 }
 
-// ============================================================================
-// SETUP
-// ============================================================================
+/* 20 kHz Hardware Timer Interrupt Service Routine (50 us cycle) */
+void IRAM_ATTR on_mpc_timer(void) {
+    portENTER_CRITICAL_ISR(&g_timer_mux);
+    uint32_t start_cycles = esp_cpu_get_ccount();
+    
+    /* 1. Sample ADC phase currents and DC bus voltage */
+    int raw_ia = analogRead(PIN_ADC_IA);
+    int raw_ib = analogRead(PIN_ADC_IB);
+    int raw_ic = analogRead(PIN_ADC_IC);
+    int raw_vdc = analogRead(PIN_ADC_VDC);
+    
+    /* Convert raw ADC counts to physical floating-point quantities */
+    float ia = ((float)raw_ia - 2048.0f) * (20.0f / 2048.0f);
+    float ib = ((float)raw_ib - 2048.0f) * (20.0f / 2048.0f);
+    float ic = ((float)raw_ic - 2048.0f) * (20.0f / 2048.0f);
+    float vdc = (float)raw_vdc * (36.0f / 4095.0f);
+    if (vdc < 12.0f) vdc = VSI_VBUS_NOMINAL;
+    
+    /* 2. Execute Finite-Control-Set Model Predictive Control Optimization */
+    mpc_system_step(ia, ib, ic, g_theta_e, g_measured_speed_rpm, g_target_speed_rpm, vdc, &g_telemetry);
+    
+    /* 3. Apply the optimal switching vector directly to the power inverter gates */
+    apply_inverter_gates(g_telemetry.sa, g_telemetry.sb, g_telemetry.sc);
+    
+    uint32_t end_cycles = esp_cpu_get_ccount();
+    g_last_cycles = end_cycles - start_cycles;
+    if (g_last_cycles > g_max_cycles) {
+        g_max_cycles = g_last_cycles;
+    }
+    g_step_ready = true;
+    portEXIT_CRITICAL_ISR(&g_timer_mux);
+}
+
 void setup() {
     Serial.begin(115200);
-    delay(100);
-    Serial.println("\n========================================================");
-    Serial.println("  Sensorless FOC with Fault-Tolerant Observer on ESP32");
-    Serial.println("  Virtual Hardware & Real-Time Simulation Enabled");
-    Serial.println("========================================================");
-
-    // Pin Modes
-    pinMode(PIN_LED_NORMAL, OUTPUT);
-    pinMode(PIN_LED_DEGRADED, OUTPUT);
-    pinMode(PIN_LED_FAULT, OUTPUT);
-    pinMode(PIN_BTN_FAULT, INPUT_PULLUP);
-    pinMode(PIN_SW_MODE, INPUT_PULLUP);
-
-    digitalWrite(PIN_LED_NORMAL, LOW);
-    digitalWrite(PIN_LED_DEGRADED, LOW);
-    digitalWrite(PIN_LED_FAULT, LOW);
-
-    // Initialize Motor & Controller Parameters
-    MotorParams motor = {
-        .Rs = M_RS, .Ls = M_LS, .psi_f = M_PSI_F, .P = M_P,
-        .J = M_J, .B = M_B, .Vbus = M_VBUS, .In = 5.0f
-    };
+    delay(500);
     
-    ControllerParams ctrl = {
-        .id_kp = 6.28f, .id_ki = 3142.0f,
-        .iq_kp = 6.28f, .iq_ki = 3142.0f,
-        .spd_kp = 0.194f, .spd_ki = 17.4f,
-        .smo_k = 20.0f, .smo_h = 0.5f, .smo_lpf = 50.0f,
-        .flux_wc = 125.6f,
-        .pwm_freq = 20000.0f, .ctrl_rate_curr = 20000.0f, .ctrl_rate_spd = 1000.0f
-    };
-
-    foc_init(&motor, &ctrl);
-    foc_set_speed_ref(1800.0f * (2.0f * (float)M_PI / 60.0f) * M_P); // Target: 1800 RPM electrical
-
-    // Initialize LEDC PWM
-    ledcSetup(0, PWM_FREQ, PWM_RESOLUTION);
-    ledcSetup(1, PWM_FREQ, PWM_RESOLUTION);
-    ledcSetup(2, PWM_FREQ, PWM_RESOLUTION);
-
-    ledcAttachPin(PIN_PWM_A, 0);
-    ledcAttachPin(PIN_PWM_B, 1);
-    ledcAttachPin(PIN_PWM_C, 2);
-
+    Serial.println("==================================================================");
+    Serial.println("Finite-Control-Set Model Predictive Control (FCS-MPC) PMSM Drive");
+    Serial.println("Department of Electrical Engineering, VJTI Mumbai");
+    Serial.println("Author: Arpan Kailash Gupta (Roll No: 241030009)");
+    Serial.println("==================================================================");
+    
+    /* Initialize Inverter Gate Output Pins */
+    pinMode(PIN_GATE_AH, OUTPUT);
+    pinMode(PIN_GATE_AL, OUTPUT);
+    pinMode(PIN_GATE_BH, OUTPUT);
+    pinMode(PIN_GATE_BL, OUTPUT);
+    pinMode(PIN_GATE_CH, OUTPUT);
+    pinMode(PIN_GATE_CL, OUTPUT);
+    
+    /* Ensure all switches are turned off initially */
+    apply_inverter_gates(0, 0, 0);
+    
+    /* Configure ADC Resolution */
     analogReadResolution(12);
-
-    // 20kHz Hardware Interrupt Timer
-    foc_timer = timerBegin(0, 80, true); 
-    timerAttachInterrupt(foc_timer, &foc_isr, true);
-    timerAlarmWrite(foc_timer, 50, true); // 50 us = 20kHz
-    timerAlarmEnable(foc_timer);
-
-    Serial.println("[HAL] 20 kHz Hardware Timer ISR active.");
-    Serial.println("[HAL] Virtual PMSM plant engaged. Ready for simulation.\n");
+    
+    /* Initialize MPC Core with nominal DC bus voltage */
+    mpc_system_init(VSI_VBUS_NOMINAL);
+    mpc_system_set_weights(MPC_WEIGHT_ID, MPC_WEIGHT_IQ, MPC_WEIGHT_SW, MPC_WEIGHT_CMV);
+    
+    /* Set up 20 kHz Hardware Timer (50 us period) on Timer 0 */
+    g_timer = timerBegin(0, 80, true); /* 80 MHz / 80 = 1 MHz (1 us tick) */
+    timerAttachInterrupt(g_timer, &on_mpc_timer, true);
+    timerAlarmWrite(g_timer, 50, true); /* 50 us alarm */
+    timerAlarmEnable(g_timer);
+    
+    Serial.println("[INFO] FCS-MPC 20 kHz Hardware Timer Active (Period: 50 us).");
 }
 
-// ============================================================================
-// MAIN LOOP (Telemetry & Status LEDs)
-// ============================================================================
 void loop() {
-    portENTER_CRITICAL(&timerMux);
-    float t_speed = telemetry_speed_rpm;
-    float t_health = telemetry_health;
-    int   t_mode = telemetry_mode;
-    float t_ia = telemetry_ia;
-    uint32_t t_cycles = telemetry_cycles;
-    uint32_t t_max_cycles = telemetry_max_cycles;
-    uint32_t t_missed = telemetry_missed_deadlines;
-    portEXIT_CRITICAL(&timerMux);
-
-    // Update Status LEDs according to control mode
-    // 0: ALIGN, 1: OPEN_LOOP_RAMP, 2: CLOSED_LOOP, 3: DEGRADED, 4: LIMP, 5: SAFE_STOP
-    if (t_mode == 2) {
-        digitalWrite(PIN_LED_NORMAL, HIGH);
-        digitalWrite(PIN_LED_DEGRADED, LOW);
-        digitalWrite(PIN_LED_FAULT, LOW);
-    } else if (t_mode == 3) {
-        digitalWrite(PIN_LED_NORMAL, LOW);
-        digitalWrite(PIN_LED_DEGRADED, HIGH);
-        digitalWrite(PIN_LED_FAULT, LOW);
-    } else if (t_mode >= 4) {
-        digitalWrite(PIN_LED_NORMAL, LOW);
-        digitalWrite(PIN_LED_DEGRADED, LOW);
-        digitalWrite(PIN_LED_FAULT, HIGH);
-    } else {
-        // Alignment or startup ramp: blink normal LED
-        static bool blink_state = false;
-        blink_state = !blink_state;
-        digitalWrite(PIN_LED_NORMAL, blink_state ? HIGH : LOW);
-        digitalWrite(PIN_LED_DEGRADED, LOW);
-        digitalWrite(PIN_LED_FAULT, LOW);
+    static uint32_t last_print = 0;
+    if (millis() - last_print >= 250) {
+        last_print = millis();
+        
+        float wcet_us = (float)g_max_cycles / 240.0f; /* 240 MHz clock */
+        float last_us = (float)g_last_cycles / 240.0f;
+        
+        Serial.printf("[FCS-MPC] Speed: %6.1f / %6.1f RPM | Id/Iq: %5.2f / %5.2f A | Vec: V%d (%d%d%d) | Loss: %4.2f W | Eff: %4.1f%% | f_sw: %5.1f kHz | WCET: %4.1f us\n",
+                      g_telemetry.speed_rpm, g_telemetry.speed_ref_rpm,
+                      g_telemetry.i_d, g_telemetry.i_q,
+                      g_telemetry.opt_vector, g_telemetry.sa, g_telemetry.sb, g_telemetry.sc,
+                      g_telemetry.p_total_loss, g_telemetry.efficiency,
+                      g_telemetry.switching_freq_hz / 1000.0f,
+                      last_us);
     }
-
-    // Telemetry streaming in Serial Plotter format
-    Serial.print("Speed_RPM:"); Serial.print(t_speed, 1); Serial.print("\t");
-    Serial.print("Target_RPM:1800.0\t");
-    Serial.print("Health_%:");  Serial.print(t_health * 100.0f, 1); Serial.print("\t");
-    Serial.print("Mode:");      Serial.print(t_mode); Serial.print("\t");
-    Serial.print("Ia_Amps:");   Serial.print(t_ia, 2); Serial.print("\t");
-    Serial.print("ISR_us:");    Serial.print((float)t_cycles / 240.0f, 1); Serial.print("\t");
-    Serial.print("WCET_us:");   Serial.print((float)t_max_cycles / 240.0f, 1); Serial.print("\t");
-    Serial.print("Missed:");    Serial.println(t_missed);
-
-    delay(100);
+    delay(10);
 }
+
+#else
+/* Standard C entry point for non-Arduino desktop validation */
+int main(void) {
+    return 0;
+}
+#endif

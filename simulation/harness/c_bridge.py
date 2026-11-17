@@ -1,96 +1,85 @@
+"""
+Ctypes Bridge for FCS-MPC PMSM Controller Shared Library
+Author: Arpan Kailash Gupta (Roll No: 241030009), VJTI Mumbai
+"""
 
 import ctypes
 import os
 import sys
 
-class FocInput(ctypes.Structure):
+class MPCTelemetry(ctypes.Structure):
     _fields_ = [
         ("i_a", ctypes.c_float),
         ("i_b", ctypes.c_float),
         ("i_c", ctypes.c_float),
-        ("v_bus", ctypes.c_float)
-    ]
-
-class FocOutput(ctypes.Structure):
-    _fields_ = [
-        ("duty_a", ctypes.c_float),
-        ("duty_b", ctypes.c_float),
-        ("duty_c", ctypes.c_float),
-        ("theta_hat", ctypes.c_float),
-        ("omega_hat", ctypes.c_float),
-        ("health_score", ctypes.c_float),
-        ("control_mode", ctypes.c_int),
         ("i_d", ctypes.c_float),
         ("i_q", ctypes.c_float),
-        ("emf_alpha", ctypes.c_float),
-        ("emf_beta", ctypes.c_float),
-        ("theta_hat_smo", ctypes.c_float),
-        ("theta_hat_flux", ctypes.c_float),
-        ("fault_channel", ctypes.c_int),
-        ("i_a_rec", ctypes.c_float),
-        ("i_b_rec", ctypes.c_float),
-        ("i_c_rec", ctypes.c_float),
-        ("smo_health", ctypes.c_float),
-        ("flux_health", ctypes.c_float),
-        ("observer_disagreement", ctypes.c_float),
-        ("emf_mag", ctypes.c_float),
-        ("confidence_smo", ctypes.c_float),
-        ("confidence_flux", ctypes.c_float)
-    ]
-
-class MotorParams(ctypes.Structure):
-    _fields_ = [
-        ("Rs", ctypes.c_float),
-        ("Ls", ctypes.c_float),
-        ("psi_f", ctypes.c_float),
-        ("P", ctypes.c_int),
-        ("J", ctypes.c_float),
-        ("B", ctypes.c_float),
-        ("Vbus", ctypes.c_float),
-        ("In", ctypes.c_float)
-    ]
-
-class ControllerParams(ctypes.Structure):
-    _fields_ = [
-        ("id_kp", ctypes.c_float), ("id_ki", ctypes.c_float),
-        ("iq_kp", ctypes.c_float), ("iq_ki", ctypes.c_float),
-        ("spd_kp", ctypes.c_float), ("spd_ki", ctypes.c_float),
-        ("smo_k", ctypes.c_float), ("smo_h", ctypes.c_float), ("smo_lpf", ctypes.c_float),
-        ("flux_wc", ctypes.c_float),
-        ("observer_select", ctypes.c_int),
-        ("pwm_freq", ctypes.c_float),
-        ("ctrl_rate_curr", ctypes.c_float),
-        ("ctrl_rate_spd", ctypes.c_float)
-    ]
-
-class FocController:
-    def __init__(self, lib_path):
-        if not os.path.exists(lib_path):
-            raise FileNotFoundError(f"CRITICAL: C library not found at {lib_path}. Run 'make lib' first.")
+        ("i_d_ref", ctypes.c_float),
+        ("i_q_ref", ctypes.c_float),
+        ("theta_e", ctypes.c_float),
+        ("omega_e", ctypes.c_float),
+        ("speed_rpm", ctypes.c_float),
+        ("speed_ref_rpm", ctypes.c_float),
+        ("torque_elec", ctypes.c_float),
         
+        ("sa", ctypes.c_uint8),
+        ("sb", ctypes.c_uint8),
+        ("sc", ctypes.c_uint8),
+        ("opt_vector", ctypes.c_uint8),
+        ("v_dc", ctypes.c_float),
+        ("v_alpha", ctypes.c_float),
+        ("v_beta", ctypes.c_float),
+        ("v_cm", ctypes.c_float),
+        ("p_conduction", ctypes.c_float),
+        ("p_switching", ctypes.c_float),
+        ("p_total_loss", ctypes.c_float),
+        ("efficiency", ctypes.c_float),
+        ("switching_freq_hz", ctypes.c_float),
+        ("total_commutations", ctypes.c_uint32),
+        
+        ("min_cost", ctypes.c_float),
+    ]
+
+class FCSMPCController:
+    def __init__(self, lib_path: str = None):
+        if lib_path is None:
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            ext = "dylib" if sys.platform == "darwin" else "so"
+            lib_path = os.path.join(base_dir, "build", f"libmpc_controller.{ext}")
+            
+        if not os.path.exists(lib_path):
+            raise FileNotFoundError(f"Shared library not found at {lib_path}. Run 'make lib' first.")
+            
         self.lib = ctypes.CDLL(lib_path)
         
-        self.lib.foc_init.argtypes = [ctypes.POINTER(MotorParams), ctypes.POINTER(ControllerParams)]
-        self.lib.foc_tick.argtypes = [ctypes.POINTER(FocInput)]
-        self.lib.foc_tick.restype = FocOutput
-        self.lib.foc_reset.argtypes = []
-        self.lib.foc_set_speed_ref.argtypes = [ctypes.c_float]
-        self.lib.foc_set_torque_ref.argtypes = [ctypes.c_float]
+        # Configure function signatures
+        self.lib.mpc_system_init.argtypes = [ctypes.c_float]
+        self.lib.mpc_system_reset.argtypes = []
+        self.lib.mpc_system_set_weights.argtypes = [ctypes.c_float, ctypes.c_float, ctypes.c_float, ctypes.c_float]
+        self.lib.mpc_system_step.argtypes = [
+            ctypes.c_float, ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float,
+            ctypes.c_float, ctypes.c_float,
+            ctypes.POINTER(MPCTelemetry)
+        ]
         
-    def init(self, motor_dict, ctrl_dict):
-        m = MotorParams(**motor_dict)
-        c = ControllerParams(**ctrl_dict)
-        self.lib.foc_init(ctypes.byref(m), ctypes.byref(c))
-        
-    def tick(self, i_a, i_b, i_c, v_bus):
-        inp = FocInput(i_a, i_b, i_c, v_bus)
-        return self.lib.foc_tick(ctypes.byref(inp))
+    def init(self, v_dc_nominal: float = 24.0):
+        self.lib.mpc_system_init(v_dc_nominal)
         
     def reset(self):
-        self.lib.foc_reset()
+        self.lib.mpc_system_reset()
         
-    def set_speed_ref(self, omega_ref):
-        self.lib.foc_set_speed_ref(omega_ref)
+    def set_weights(self, lambda_d: float, lambda_q: float, lambda_sw: float, lambda_cmv: float):
+        self.lib.mpc_system_set_weights(lambda_d, lambda_q, lambda_sw, lambda_cmv)
         
-    def set_torque_ref(self, iq_ref):
-        self.lib.foc_set_torque_ref(iq_ref)
+    def step(self, i_a: float, i_b: float, i_c: float,
+             theta_e: float, speed_rpm: float,
+             speed_ref_rpm: float, v_dc: float = 24.0) -> MPCTelemetry:
+        telem = MPCTelemetry()
+        self.lib.mpc_system_step(
+            i_a, i_b, i_c,
+            theta_e, speed_rpm,
+            speed_ref_rpm, v_dc,
+            ctypes.byref(telem)
+        )
+        return telem
