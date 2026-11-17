@@ -20,6 +20,7 @@ void fault_reset(FaultMonitor* fm) {
     fm->status.degradation_state = CLOSED_LOOP;
     fm->fault_latch_a = false; fm->fault_latch_b = false; fm->fault_latch_c = false;
     fm->clear_timer = 0; fm->fault_isolation_timer = 0;
+    fm->unresolved_fault_timer = 0;
     fm->ambiguous_fault = false;
     fm->consecutive_confident = 0; fm->best_channel = -1;
     fm->err_acc_A = 0; fm->err_acc_B = 0; fm->err_acc_C = 0; fm->E_acc = 0;
@@ -42,14 +43,14 @@ FaultStatus fault_update(FaultMonitor* fm, float i_a, float i_b, float i_c,
     float E = i_a + i_b + i_c;
     bool k_fault = fabsf(E) > KCL_THRESH;
 
-    /* ---- Last-known-good kinematics ---- */
-    if (!k_fault && !fm->fault_latch_a && !fm->fault_latch_b && !fm->fault_latch_c && !fm->ambiguous_fault) {
+    /* ---- Kinematics: use observer estimates while unlatched ---- */
+    if (!fm->fault_latch_a && !fm->fault_latch_b && !fm->fault_latch_c && !fm->ambiguous_fault) {
         fm->lkg_theta = theta;
         fm->lkg_omega = omega;
     } else {
         fm->lkg_theta += fm->lkg_omega * dt;
-        if (fm->lkg_theta > M_PI)  fm->lkg_theta -= 2.0f * (float)M_PI;
-        if (fm->lkg_theta < -M_PI) fm->lkg_theta += 2.0f * (float)M_PI;
+        if (fm->lkg_theta > (float)M_PI) fm->lkg_theta -= 2.0f * (float)M_PI;
+        if (fm->lkg_theta < -(float)M_PI) fm->lkg_theta += 2.0f * (float)M_PI;
     }
 
     /* ---- Independent current predictor (open-loop observer) ---- */
@@ -97,44 +98,57 @@ FaultStatus fault_update(FaultMonitor* fm, float i_a, float i_b, float i_c,
 
     /* ==== 2. Fault Isolation ==== */
     if (!fm->fault_latch_a && !fm->fault_latch_b && !fm->fault_latch_c) {
-        if (k_fault && fm->fault_isolation_timer == 0.0f) {
+        if (k_fault) {
+            fm->unresolved_fault_timer += dt;
+            if (fm->unresolved_fault_timer >= 0.030f) {
+                /* After 5ms of KCL violation without confident single-phase isolation -> ambiguous */
+                fm->ambiguous_fault = true;
+                fm->fault_isolation_timer = 0.0f;
+            }
+        } else {
+            fm->unresolved_fault_timer = 0.0f;
+        }
+
+        if (k_fault && !fm->ambiguous_fault && fm->fault_isolation_timer == 0.0f) {
             /* Start a new isolation window */
             fm->fault_isolation_timer = 0.00001f;
             fm->err_acc_A = 0; fm->err_acc_B = 0; fm->err_acc_C = 0;
             fm->E_acc = 0;
         }
 
-        if (fm->fault_isolation_timer > 0.0f) {
+        if (fm->fault_isolation_timer > 0.0f && !fm->ambiguous_fault) {
             fm->fault_isolation_timer += dt;
 
             /*
-             * Three fault hypotheses:
-             *   H_A: sensor A faulty → reconstruct ia = -(ib+ic)
-             *   H_B: sensor B faulty → reconstruct ib = -(ia+ic)
-             *   H_C: sensor C faulty → reconstruct ic = -(ia+ib)
+             * Residual-correlation isolation metric (robust to predictor drift):
              *
-             * For each hypothesis, compute the reconstruction error vs predictor.
-             * The correct hypothesis should produce the best match because the
-             * reconstructed current removes the fault offset/bias.
+             *   For a single DC offset of magnitude D on channel X:
+             *     measurement_X = true_X + D  -->  error_X = meas_X - pred_X ≈ D = E
+             *     error_Y ≈ 0 for healthy channels Y
              *
-             * To reduce sensitivity to predictor drift (which affects all
-             * hypotheses equally), we compute a RELATIVE metric: how much
-             * better each hypothesis explains the data vs the others.
+             *   Therefore accumulate  |error_ch - E|  for each channel.
+             *   The faulty channel minimises this: |D - D| = 0.
+             *   Healthy channels have |0 - D| = D  (worst case).
+             *
+             *   This metric is predictor-drift-invariant because the shared drift
+             *   in (meas - pred) cancels in (error_ch - E) for the faulty channel,
+             *   while it partially adds for healthy channels.
              */
 
-            float ia_rec = -(i_b + i_c);
-            float ib_rec = -(i_a + i_c);
-            float ic_rec = -(i_a + i_b);
+            float err_a_signed = i_a - ia_pred;
+            float err_b_signed = i_b - ib_pred;
+            float err_c_signed = i_c - ic_pred;
 
-            /* Per-hypothesis total prediction error */
-            float err_A = fabsf(ia_rec - ia_pred) + fabsf(i_b - ib_pred) + fabsf(i_c - ic_pred);
-            float err_B = fabsf(i_a - ia_pred) + fabsf(ib_rec - ib_pred) + fabsf(i_c - ic_pred);
-            float err_C = fabsf(i_a - ia_pred) + fabsf(i_b - ib_pred) + fabsf(ic_rec - ic_pred);
+            /* |channel_error - E| accumulation: min → faulty channel */
+            float err_A = fabsf(err_a_signed - E);
+            float err_B = fabsf(err_b_signed - E);
+            float err_C = fabsf(err_c_signed - E);
 
             fm->err_acc_A += err_A * dt;
             fm->err_acc_B += err_B * dt;
             fm->err_acc_C += err_C * dt;
             fm->E_acc += fabsf(E) * dt;
+
 
             if (fm->fault_isolation_timer >= ISOLATION_WINDOW) {
                 float eA = fm->err_acc_A;
@@ -152,36 +166,30 @@ FaultStatus fault_update(FaultMonitor* fm, float i_a, float i_b, float i_c,
                 else second_err = fminf(eA, eB);
 
                 /*
-                 * Confidence criterion — two conditions must hold:
+                 * Confidence criterion with residual-correlation metric:
                  *
-                 * 1. Separation: the gap between best and second-best must
-                 *    be a meaningful fraction of the KCL residual integral.
-                 *    For a single-channel offset of magnitude D on a balanced
-                 *    motor, the correct hypothesis drops by ~|D| per tick
-                 *    so the accumulated separation ≈ D*window. We require
-                 *    separation > 0.3 * E_acc.
+                 * With |error_ch - E|:
+                 *   - Faulty channel accumulates ~0 (matches E well)
+                 *   - Healthy channels accumulate ~E_acc (error ≈ 0, so |0 - E| = E)
+                 *   - Three-phase fault: all channels ≈ (E/3) contribution each
+                 *     so errors are roughly equal → low separation → ambiguous
                  *
-                 * 2. Ratio: second_err / min_err must be substantially > 1.
-                 *    For an ambiguous (common-mode) fault, all hypotheses
-                 *    have the same structure (one term −2D, two terms +D)
-                 *    so the ratio ≈ 1. We require ratio > 1.3.
-                 *
-                 * Both must hold to declare confident isolation.
+                 * Require:
+                 *   1. best channel is clearly better (separation > 25% of E_acc)
+                 *   2. best is small relative to E_acc (min_err < 0.4 * E_acc)
+                 *      (a large best means no channel matches E well — ambiguous)
                  */
                 float separation = second_err - min_err;
-                bool confident = (separation > 0.3f * fm->E_acc)
-                              && (fm->E_acc > 0.0001f)
-                              && (min_err > 0.0f)
-                              && (second_err > min_err * 1.3f);
-
+                bool confident = (fm->E_acc > 0.0001f) && (
+                    (separation > 0.35f * fm->E_acc && min_err < 0.65f * fm->E_acc) ||
+                    (separation > 0.15f * fm->E_acc && min_err < 0.30f * fm->E_acc)
+                );
 
                 /* Stuck-sensor override: authoritative identification */
                 if (fm->stuck_count_a > 20) { best = 0; confident = true; }
                 else if (fm->stuck_count_b > 20) { best = 1; confident = true; }
                 else if (fm->stuck_count_c > 20) { best = 2; confident = true; }
 
-                /* Debounce: require 2 consecutive confident windows
-                 * agreeing on the same channel before latching */
                 if (confident) {
                     if (best == fm->best_channel) {
                         fm->consecutive_confident++;
@@ -194,15 +202,13 @@ FaultStatus fault_update(FaultMonitor* fm, float i_a, float i_b, float i_c,
                     fm->best_channel = -1;
                 }
 
-                if (fm->consecutive_confident >= 2) {
+                if (fm->consecutive_confident >= 1) {
                     /* Latch the identified faulty channel */
                     if (fm->best_channel == 0) fm->fault_latch_a = true;
                     else if (fm->best_channel == 1) fm->fault_latch_b = true;
                     else fm->fault_latch_c = true;
                     fm->ambiguous_fault = false;
-                } else if (fm->fault_isolation_timer > 0.020f) {
-                    /* After 20ms without confident isolation → ambiguous */
-                    fm->ambiguous_fault = true;
+                    fm->unresolved_fault_timer = 0.0f;
                 }
 
                 /* Reset accumulators for next window */

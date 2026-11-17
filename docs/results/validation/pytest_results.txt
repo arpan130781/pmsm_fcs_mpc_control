@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Users/arpankailashgupta/Desktop/sensorless-foc-pio/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/arpankailashgupta/Desktop/sensorless-foc-pio
+plugins: anyio-4.12.1
+collecting ... collected 9 items
+
+simulation/plant/test_plant.py::test_standstill PASSED                   [ 11%]
+simulation/plant/test_plant.py::test_acceleration PASSED                 [ 22%]
+simulation/plant/test_plant.py::test_steady_state PASSED                 [ 33%]
+simulation/plant/test_plant.py::test_transforms_known_angles PASSED      [ 44%]
+simulation/plant/test_plant.py::test_round_trip PASSED                   [ 55%]
+simulation/test_scenarios.py::test_scenario_4_angle_limit PASSED         [ 66%]
+simulation/test_scenarios.py::test_invalid_fault_type PASSED             [ 77%]
+simulation/test_scenarios.py::test_parameter_drift_invalid_param PASSED  [ 88%]
+simulation/test_scenarios.py::test_scenario_6_noise_burst_recovery PASSED [100%]
+
+============================== 9 passed in 12.60s ==============================

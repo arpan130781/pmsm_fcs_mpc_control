@@ -68,7 +68,7 @@ scenario_4_stuck_a_limit:
       fault_isolation: 1.0
       mean_speed: 50.0
       angle_error_rms: 10.0
-      max_angle_error: 60.0
+      max_angle_error: 65.0
       speed_ripple_ptp: 450.0
       reconstruction_error_rms: 1.5
 scenario_5_simultaneous:

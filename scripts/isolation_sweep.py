@@ -99,8 +99,30 @@ if __name__ == '__main__':
                     if 'sensor_offset' in types:
                         for off in offsets:
                             jobs.append((lib, 'sensor_offset', off, ref, ch, t0 + ph))
+    print(f"Running sweep: {len(jobs)} jobs across {a.jobs} workers...", flush=True)
     with Pool(a.jobs) as pool:
-        R = pool.map(one, jobs)
+        R = []
+        for i, r in enumerate(pool.imap_unordered(one, jobs), 1):
+            R.append(r)
+            if i % 10 == 0 or i == len(jobs):
+                print(f"  Completed {i}/{len(jobs)} runs...", flush=True)
+
+    R = sorted(R, key=lambda x: (x['typ'], x['offset'], x['ref'], x['ch'], x['onset']))
+
+    # Save machine-readable results
+    import json, csv
+    out_dir = os.path.join(ROOT, 'docs', 'results', 'validation')
+    os.makedirs(out_dir, exist_ok=True)
+    json_path = os.path.join(out_dir, 'sweep_results.json')
+    csv_path = os.path.join(out_dir, 'sweep_results.csv')
+    with open(json_path, 'w') as f:
+        json.dump(R, f, indent=2)
+    keys = ['typ', 'offset', 'ref', 'ch', 'onset', 'latched', 'iso', 'ok', 'kind', 'mean', 'ptp', 'ang']
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=keys)
+        writer.writeheader()
+        writer.writerows(R)
+    print(f"\nSaved sweep results to {json_path} and {csv_path}")
 
     failed = False
     print(f"{len(R)} runs\n")
@@ -123,3 +145,4 @@ if __name__ == '__main__':
               f"latched={r['latched']} {r['kind']} mean={r['mean']:.0f} ptp={r['ptp']:.0f} ang={r['ang']:.0f}")
     print(f"\nTarget >= {a.target:g}% acceptable outcomes per group: {'FAILED' if failed else 'MET'}")
     sys.exit(1 if failed else 0)
+

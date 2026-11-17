@@ -45,3 +45,7 @@ build/
 # Temporary files
 *.tmp
 *.log
+
+# MATLAB / Simulink caches
+slprj/
+*.slxc

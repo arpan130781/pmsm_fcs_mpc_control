@@ -1,0 +1,600 @@
+[
+  {
+    "scenario": "no_fault_baseline",
+    "passed": true,
+    "fault_type": "none",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": null,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1999.07,
+    "speed_error_rpm": 0.93,
+    "speed_ripple_ptp_rpm": 142.12,
+    "angle_rms_deg": 3.37,
+    "max_angle_error_deg": 7.75,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "max_angle_error": {
+        "pass": true,
+        "value": 7.748
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.37
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 142.118
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 0.928
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_1_rs_drift",
+    "passed": true,
+    "fault_type": "parameter_drift",
+    "fault_channel": "none",
+    "fault_magnitude": 1.05,
+    "onset_time": 1.5,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1999.19,
+    "speed_error_rpm": 0.81,
+    "speed_ripple_ptp_rpm": 129.79,
+    "angle_rms_deg": 3.33,
+    "max_angle_error_deg": 7.58,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.328
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 7.577
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 0.815
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 129.792
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_2_offset_a_2_0",
+    "passed": true,
+    "fault_type": "sensor_offset",
+    "fault_channel": "a",
+    "fault_magnitude": 2.0,
+    "onset_time": 2.0,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1998.91,
+    "speed_error_rpm": 1.09,
+    "speed_ripple_ptp_rpm": 111.78,
+    "angle_rms_deg": 3.31,
+    "max_angle_error_deg": 6.95,
+    "detection_latency_ms": 0.95,
+    "expected_channel": 1,
+    "isolated_channel": 1,
+    "reconstruction_error_rms_A": 0.062,
+    "expected_mode": 3,
+    "actual_mode": 3,
+    "criteria": {
+      "detection_latency": {
+        "pass": true,
+        "value": 0.95
+      },
+      "fault_isolation": {
+        "pass": true,
+        "value": 1.0
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 1.091
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.313
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 6.955
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 111.782
+      },
+      "reconstruction_error_rms": {
+        "pass": true,
+        "value": 0.062
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 3.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_3_stuck_b_2_0",
+    "passed": true,
+    "fault_type": "sensor_stuck",
+    "fault_channel": "b",
+    "fault_magnitude": 0.0,
+    "onset_time": 2.0,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1998.96,
+    "speed_error_rpm": 1.04,
+    "speed_ripple_ptp_rpm": 100.26,
+    "angle_rms_deg": 3.34,
+    "max_angle_error_deg": 7.15,
+    "detection_latency_ms": 1.05,
+    "expected_channel": 2,
+    "isolated_channel": 2,
+    "reconstruction_error_rms_A": 0.036,
+    "expected_mode": 3,
+    "actual_mode": 3,
+    "criteria": {
+      "detection_latency": {
+        "pass": true,
+        "value": 1.05
+      },
+      "fault_isolation": {
+        "pass": true,
+        "value": 2.0
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 1.042
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.338
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 7.149
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 100.261
+      },
+      "reconstruction_error_rms": {
+        "pass": true,
+        "value": 0.036
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 3.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_4_stuck_a_limit",
+    "passed": true,
+    "fault_type": "sensor_stuck_limit",
+    "fault_channel": "a",
+    "fault_magnitude": 10.0,
+    "onset_time": 2.0,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1999.01,
+    "speed_error_rpm": 0.99,
+    "speed_ripple_ptp_rpm": 157.97,
+    "angle_rms_deg": 3.46,
+    "max_angle_error_deg": 15.79,
+    "detection_latency_ms": 0.95,
+    "expected_channel": 1,
+    "isolated_channel": 1,
+    "reconstruction_error_rms_A": 0.506,
+    "expected_mode": 3,
+    "actual_mode": 3,
+    "criteria": {
+      "detection_latency": {
+        "pass": true,
+        "value": 0.95
+      },
+      "fault_isolation": {
+        "pass": true,
+        "value": 1.0
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 0.994
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.46
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 15.791
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 157.97
+      },
+      "reconstruction_error_rms": {
+        "pass": true,
+        "value": 0.506
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 3.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_5_simultaneous",
+    "passed": true,
+    "fault_type": "sensor_offset",
+    "fault_channel": "c",
+    "fault_magnitude": 2.0,
+    "onset_time": 1.5,
+    "ref_speed_rpm": 1800.0,
+    "actual_mean_speed_rpm": 1799.22,
+    "speed_error_rpm": 0.78,
+    "speed_ripple_ptp_rpm": 47.47,
+    "angle_rms_deg": 2.97,
+    "max_angle_error_deg": 4.48,
+    "detection_latency_ms": 5.95,
+    "expected_channel": 3,
+    "isolated_channel": 3,
+    "reconstruction_error_rms_A": 0.126,
+    "expected_mode": 3,
+    "actual_mode": 3,
+    "criteria": {
+      "detection_latency": {
+        "pass": true,
+        "value": 5.95
+      },
+      "fault_isolation": {
+        "pass": true,
+        "value": 3.0
+      },
+      "mean_speed": {
+        "pass": true,
+        "value": 0.784
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 2.975
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 4.483
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 47.468
+      },
+      "reconstruction_error_rms": {
+        "pass": true,
+        "value": 0.126
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 3.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_6_noise_burst",
+    "passed": true,
+    "fault_type": "noise_burst",
+    "fault_channel": "a",
+    "fault_magnitude": 2.0,
+    "onset_time": 1.5,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1999.05,
+    "speed_error_rpm": 0.95,
+    "speed_ripple_ptp_rpm": 143.06,
+    "angle_rms_deg": 3.38,
+    "max_angle_error_deg": 7.68,
+    "detection_latency_ms": 0.95,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.044,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 0.951
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 3.377
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 7.677
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 143.058
+      },
+      "recovery_time": {
+        "pass": true,
+        "value": 0.5
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_7_inductance_mismatch",
+    "passed": true,
+    "fault_type": "parameter_drift",
+    "fault_channel": "none",
+    "fault_magnitude": 0.8,
+    "onset_time": 1.5,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 2000.0,
+    "speed_error_rpm": 0.0,
+    "speed_ripple_ptp_rpm": 223.11,
+    "angle_rms_deg": 5.87,
+    "max_angle_error_deg": 12.56,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 0.002
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 5.866
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 12.556
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 223.115
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_8_speed_reversal",
+    "passed": true,
+    "fault_type": "none",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": null,
+    "ref_speed_rpm": -2000.0,
+    "actual_mean_speed_rpm": -1821.57,
+    "speed_error_rpm": 178.43,
+    "speed_ripple_ptp_rpm": 4304.24,
+    "angle_rms_deg": 6.63,
+    "max_angle_error_deg": 120.46,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 178.43
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 6.631
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 120.462
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 4304.24
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_9_load_step",
+    "passed": true,
+    "fault_type": "none",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": null,
+    "ref_speed_rpm": 1800.0,
+    "actual_mean_speed_rpm": 1798.71,
+    "speed_error_rpm": 1.29,
+    "speed_ripple_ptp_rpm": 69.56,
+    "angle_rms_deg": 2.98,
+    "max_angle_error_deg": 5.02,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 1.287
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 2.984
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 5.024
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 69.559
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_10_low_speed",
+    "passed": true,
+    "fault_type": "none",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": null,
+    "ref_speed_rpm": 500.0,
+    "actual_mean_speed_rpm": 518.79,
+    "speed_error_rpm": 18.79,
+    "speed_ripple_ptp_rpm": 880.93,
+    "angle_rms_deg": 16.9,
+    "max_angle_error_deg": 75.53,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 18.794
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 16.903
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 75.528
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 880.931
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_11_slow_ramp",
+    "passed": true,
+    "fault_type": "none",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": null,
+    "ref_speed_rpm": 1250.0,
+    "actual_mean_speed_rpm": 1001.49,
+    "speed_error_rpm": 248.51,
+    "speed_ripple_ptp_rpm": 824.88,
+    "angle_rms_deg": 6.68,
+    "max_angle_error_deg": 16.4,
+    "detection_latency_ms": null,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 0.0,
+    "expected_mode": 2,
+    "actual_mode": 2,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 248.51
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 6.678
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 16.404
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 824.875
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 2.0
+      }
+    }
+  },
+  {
+    "scenario": "scenario_12_ambiguous_fault",
+    "passed": true,
+    "fault_type": "simultaneous",
+    "fault_channel": "none",
+    "fault_magnitude": 0.0,
+    "onset_time": 2.0,
+    "ref_speed_rpm": 2000.0,
+    "actual_mean_speed_rpm": 1747.86,
+    "speed_error_rpm": 252.14,
+    "speed_ripple_ptp_rpm": 340.59,
+    "angle_rms_deg": 2.8,
+    "max_angle_error_deg": 7.15,
+    "detection_latency_ms": 29.95,
+    "expected_channel": 0,
+    "isolated_channel": 0,
+    "reconstruction_error_rms_A": 2.0,
+    "expected_mode": 4,
+    "actual_mode": 4,
+    "criteria": {
+      "mean_speed": {
+        "pass": true,
+        "value": 252.143
+      },
+      "angle_error_rms": {
+        "pass": true,
+        "value": 2.8
+      },
+      "max_angle_error": {
+        "pass": true,
+        "value": 7.145
+      },
+      "speed_ripple_ptp": {
+        "pass": true,
+        "value": 340.59
+      },
+      "expected_mode": {
+        "pass": true,
+        "value": 4.0
+      }
+    }
+  }
+]

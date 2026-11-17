@@ -1,0 +1,14 @@
+scenario,passed,fault_type,fault_channel,fault_magnitude,onset_time,ref_speed_rpm,actual_mean_speed_rpm,speed_error_rpm,speed_ripple_ptp_rpm,angle_rms_deg,max_angle_error_deg,detection_latency_ms,expected_channel,isolated_channel,reconstruction_error_rms_A,expected_mode,actual_mode
+no_fault_baseline,True,none,none,0.0,,2000.0,1999.07,0.93,142.12,3.37,7.75,,0,0,0.0,2,2
+scenario_1_rs_drift,True,parameter_drift,none,1.05,1.5,2000.0,1999.19,0.81,129.79,3.33,7.58,,0,0,0.0,2,2
+scenario_2_offset_a_2_0,True,sensor_offset,a,2.0,2.0,2000.0,1998.91,1.09,111.78,3.31,6.95,0.95,1,1,0.062,3,3
+scenario_3_stuck_b_2_0,True,sensor_stuck,b,0.0,2.0,2000.0,1998.96,1.04,100.26,3.34,7.15,1.05,2,2,0.036,3,3
+scenario_4_stuck_a_limit,True,sensor_stuck_limit,a,10.0,2.0,2000.0,1999.01,0.99,157.97,3.46,15.79,0.95,1,1,0.506,3,3
+scenario_5_simultaneous,True,sensor_offset,c,2.0,1.5,1800.0,1799.22,0.78,47.47,2.97,4.48,5.95,3,3,0.126,3,3
+scenario_6_noise_burst,True,noise_burst,a,2.0,1.5,2000.0,1999.05,0.95,143.06,3.38,7.68,0.95,0,0,0.044,2,2
+scenario_7_inductance_mismatch,True,parameter_drift,none,0.8,1.5,2000.0,2000.0,0.0,223.11,5.87,12.56,,0,0,0.0,2,2
+scenario_8_speed_reversal,True,none,none,0.0,,-2000.0,-1821.57,178.43,4304.24,6.63,120.46,,0,0,0.0,2,2
+scenario_9_load_step,True,none,none,0.0,,1800.0,1798.71,1.29,69.56,2.98,5.02,,0,0,0.0,2,2
+scenario_10_low_speed,True,none,none,0.0,,500.0,518.79,18.79,880.93,16.9,75.53,,0,0,0.0,2,2
+scenario_11_slow_ramp,True,none,none,0.0,,1250.0,1001.49,248.51,824.88,6.68,16.4,,0,0,0.0,2,2
+scenario_12_ambiguous_fault,True,simultaneous,none,0.0,2.0,2000.0,1747.86,252.14,340.59,2.8,7.15,29.95,0,0,2.0,4,4
