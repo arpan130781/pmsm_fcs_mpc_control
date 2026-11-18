@@ -1,4 +1,5 @@
 PYTHON ?= python3
+MATLAB ?= $(shell if [ -d "/Applications/MATLAB_R2022b.app/bin" ]; then echo "/Applications/MATLAB_R2022b.app/bin/matlab"; else which matlab; fi)
 
 CC=gcc
 CFLAGS=-Wall -Wextra -O3 -fPIC
@@ -16,7 +17,7 @@ LIB_TARGET := $(BUILD_DIR)/libmpc_controller.$(LIB_EXT)
 LEGACY_LIB := $(BUILD_DIR)/libfoc_controller.$(LIB_EXT)
 SRCS := $(filter-out $(SRC_DIR)/tests/%, $(wildcard $(SRC_DIR)/*.c))
 
-.PHONY: all lib test pytest test-all clean run
+.PHONY: all lib test pytest test-all clean run simulink simulink-sim simulink-test
 
 all: lib test
 
@@ -41,3 +42,17 @@ clean:
 
 run: lib
 	$(PYTHON) simulation/harness/mpc_runner.py
+
+simulink-build:
+	@echo "=== Compiling MEX S-Functions for Simulink ==="
+	cd simulink && $(MATLAB) -batch "compile_all_sfunctions; create_pmsm_mpc_model"
+
+simulink-sim:
+	@echo "=== Executing FCS-MPC Simulink Co-Simulation ==="
+	cd simulink && $(MATLAB) -batch "run_simulink_mpc_simulation"
+
+simulink-test:
+	@echo "=== Running FCS-MPC Automated Simulink Verification Suite ==="
+	cd simulink && $(MATLAB) -batch "test_simulink_suite"
+
+simulink: simulink-build simulink-sim

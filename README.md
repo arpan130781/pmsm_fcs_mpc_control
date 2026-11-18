@@ -188,9 +188,18 @@ PMSM-FaultTolerant-Control/
 │   └── analysis/
 │       ├── metrics.py                # Performance metric calculations (THD, settling time)
 │       └── plotter.py                # High-DPI publication waveform plotter
-├── simulink/                         # MATLAB / Simulink Co-Simulation
-│   ├── sfun_mpc_controller.c         # Level-2 C-MEX S-Function for Simulink
-│   └── pmsm_foc_simulink.slx         # Simulink graphical model
+├── simulink/                         # MATLAB / Simulink Co-Simulation Suite
+│   ├── pmsm_mpc_simulink.slx         # Simulink graphical closed-loop model
+│   ├── sfun_mpc_controller.c         # Level-2 C-MEX S-Function for FCS-MPC Controller
+│   ├── sfun_pmsm_plant.c             # Level-2 C-MEX S-Function for Continuous PMSM & 2L-VSI
+│   ├── init_pmsm_mpc.m               # Model workspace initialization script
+│   ├── create_pmsm_mpc_model.m       # Programmatic model generator and wiring routine
+│   ├── compile_all_sfunctions.m      # Automated multi-platform MEX build script
+│   ├── run_simulink_mpc_simulation.m # Simulation runner, metrics calculator, and plotter
+│   ├── test_simulink_suite.m         # 6-step automated regression verification test suite
+│   └── results/                      # Output figures and performance waveforms
+│       ├── simulink_mpc_dynamic_response.png
+│       └── simulink_mpc_power_electronics_metrics.png
 └── docs/
     └── figures/                      # Generated 300-DPI publication waveforms
         ├── mpc_dynamic_speed_torque_response.png
@@ -254,6 +263,47 @@ Author: Arpan Kailash Gupta (Roll No: 241030009)
 [SCENARIO 3] DC-Link Supply Sag Disturbance Rejection...
 [SUCCESS] Saved Scenario 3 plot to docs/figures/mpc_dc_link_sag_rejection.png
 ```
+
+### 6.4 MATLAB / Simulink FCS-MPC Co-Simulation Suite
+
+The repository includes an industrial-grade MATLAB / Simulink simulation suite based on Level-2 C-MEX S-Functions:
+* **Model:** [`simulink/pmsm_mpc_simulink.slx`](file:///Users/arpankailashgupta/Desktop/PMSM-FaultTolerant-Control/simulink/pmsm_mpc_simulink.slx)
+* **S-Functions:**
+  * [`simulink/sfun_mpc_controller.c`](file:///Users/arpankailashgupta/Desktop/PMSM-FaultTolerant-Control/simulink/sfun_mpc_controller.c): Discrete FCS-MPC optimizer ($20\,\text{kHz}$, $T_s = 50\,\mu\text{s}$) executing 2-step ahead prediction, 8-vector cost evaluation, and loss/CMV calculations.
+  * [`simulink/sfun_pmsm_plant.c`](file:///Users/arpankailashgupta/Desktop/PMSM-FaultTolerant-Control/simulink/sfun_pmsm_plant.c): Continuous Surface PMSM motor model with 2L-VSI bridge, RK4 integration ($10\,\mu\text{s}$ solver step), cogging torque harmonics, and load dynamics.
+
+#### Automated Execution via Makefile
+```bash
+# 1. Compile S-Functions and construct the Simulink model
+make simulink-build
+
+# 2. Execute 2.0s closed-loop simulation and generate 300-DPI publication plots
+make simulink-sim
+
+# 3. Run the automated 6-step verification suite
+make simulink-test
+```
+
+#### Interactive Simulation in MATLAB GUI
+1. Launch MATLAB:
+   ```bash
+   matlab &
+   ```
+2. In the MATLAB Command Window, navigate to the `simulink` directory and initialize parameters:
+   ```matlab
+   cd simulink
+   init_pmsm_mpc
+   ```
+3. Open the model:
+   ```matlab
+   open_system('pmsm_mpc_simulink')
+   ```
+4. Click **Run** on the Simulink toolbar (or run `sim('pmsm_mpc_simulink')`).
+5. Double-click the visual scopes to inspect real-time responses:
+   * **`Scope_Speed_and_Torque`**: Observe $1800\,\text{RPM}$ speed reference tracking and $0.10\,\text{N}\cdot\text{m}$ load rejection.
+   * **`Scope_Currents`**: Real-time 3-phase sinusoidal stator currents ($i_a, i_b, i_c$) and synchronous $d-q$ currents ($i_d \approx 0\,\text{A}$ for MTPA).
+   * **`Scope_Power_Electronics`**: Real-time switching vector selection ($V_0 - V_7$), Common-Mode Voltage (CMV) reduction, inverter power dissipation, and stage efficiency ($> 99\%$).
+
 
 ---
 

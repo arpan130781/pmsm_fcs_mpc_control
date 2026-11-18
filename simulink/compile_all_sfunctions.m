@@ -1,64 +1,91 @@
 % =========================================================================
 % compile_all_sfunctions.m
 %
-% Compiles the C MEX S-Functions for Simulink:
-%   1. sfun_foc_controller: Pure C Sensorless FOC with Observers & Fault Monitor
-%   2. sfun_pmsm_plant: Continuous-state 3-Phase PMSM Motor & Inverter
+% Compiles Level-2 C MEX S-Functions for the Finite-Control-Set Model
+% Predictive Control (FCS-MPC) PMSM Drive in MATLAB/Simulink:
+%   1. sfun_mpc_controller: 2-step ahead FCS-MPC with Multi-Objective Loss/CMV
+%   2. sfun_pmsm_plant: Continuous-state 3-Phase PMSM & 2L-VSI Inverter
+%
+% Author: Arpan Kailash Gupta (Roll No: 241030009)
+% Department of Electrical Engineering, VJTI Mumbai
 % =========================================================================
 
 function compile_all_sfunctions()
     here = fileparts(mfilename('fullpath'));
     src_dir = fullfile(here, '..', 'src');
     
-    fprintf('Compiling Simulink C-MEX S-Functions in %s...\n', here);
+    fprintf('==================================================================\n');
+    fprintf('Compiling Simulink C-MEX S-Functions for FCS-MPC PMSM Drive...\n');
+    fprintf('Directory: %s\n', here);
+    fprintf('==================================================================\n');
     
-    c_sources = { ...
-        fullfile(src_dir, 'foc_core.c'), ...
-        fullfile(src_dir, 'fault_monitor.c'), ...
-        fullfile(src_dir, 'smo.c'), ...
-        fullfile(src_dir, 'flux_observer.c'), ...
-        fullfile(src_dir, 'observer_manager.c'), ...
-        fullfile(src_dir, 'handoff.c'), ...
-        fullfile(src_dir, 'if_startup.c'), ...
-        fullfile(src_dir, 'pi_controller.c') ...
+    mpc_sources = { ...
+        fullfile(src_dir, 'inverter_2lvsi.c'), ...
+        fullfile(src_dir, 'mpc_core.c'), ...
+        fullfile(src_dir, 'speed_controller.c'), ...
+        fullfile(src_dir, 'mpc_api.c') ...
     };
 
-    % Check if running on macOS with clang available
+    % Check platform
     if ismac
         matlab_root = matlabroot;
-        clang_cmd = sprintf(['clang -arch x86_64 -bundle -fPIC -O2 ' ...
-            '-I"%s/extern/include" -I"%s/simulink/include" -I"%s" ' ...
-            '-DMATLAB_MEX_FILE -L"%s/bin/maci64" -lmx -lmex -lmat -lm ' ...
-            '-Wl,-exported_symbols_list,"%s/extern/lib/maci64/mexFunction.map" ' ...
-            '"%s/sfun_foc_controller.c" %s -o "%s/sfun_foc_controller.mexmaci64"'], ...
-            matlab_root, matlab_root, src_dir, matlab_root, matlab_root, ...
-            here, sprintf('"%s" ', c_sources{:}), here);
-        
-        status = system(clang_cmd);
-        if status == 0
-            fprintf('  [SUCCESS] sfun_foc_controller compiled.\n');
+        % Clang direct build for macOS (handles architecture and SDK automatically)
+        arch = computer('arch');
+        if strcmp(arch, 'maci64')
+            target_arch = 'x86_64';
+            lib_sub = 'maci64';
+            ext = 'mexmaci64';
         else
-            fprintf('  [FALLBACK] Compiling via mex...\n');
-            mex(['-I' src_dir], fullfile(here, 'sfun_foc_controller.c'), c_sources{:}, '-outdir', here);
+            target_arch = 'arm64';
+            lib_sub = 'maca64';
+            ext = 'mexmaca64';
         end
         
-        plant_cmd = sprintf(['clang -arch x86_64 -bundle -fPIC -O2 ' ...
-            '-I"%s/extern/include" -I"%s/simulink/include" ' ...
-            '-DMATLAB_MEX_FILE -L"%s/bin/maci64" -lmx -lmex -lmat -lm ' ...
-            '-Wl,-exported_symbols_list,"%s/extern/lib/maci64/mexFunction.map" ' ...
-            '"%s/sfun_pmsm_plant.c" -o "%s/sfun_pmsm_plant.mexmaci64"'], ...
-            matlab_root, matlab_root, matlab_root, matlab_root, here, here);
+        fprintf('Targeting macOS (%s) with clang...\n', target_arch);
         
-        status2 = system(plant_cmd);
-        if status2 == 0
-            fprintf('  [SUCCESS] sfun_pmsm_plant compiled.\n');
+        % 1. Compile sfun_mpc_controller
+        mpc_src_str = sprintf('"%s" ', mpc_sources{:});
+        clang_cmd_mpc = sprintf(['clang -arch %s -bundle -fPIC -O3 ' ...
+            '-I"%s/extern/include" -I"%s/simulink/include" -I"%s" ' ...
+            '-DMATLAB_MEX_FILE -L"%s/bin/%s" -lmx -lmex -lmat -lm ' ...
+            '-Wl,-exported_symbols_list,"%s/extern/lib/%s/mexFunction.map" ' ...
+            '"%s/sfun_mpc_controller.c" %s -o "%s/sfun_mpc_controller.%s"'], ...
+            target_arch, matlab_root, matlab_root, src_dir, ...
+            matlab_root, lib_sub, matlab_root, lib_sub, ...
+            here, mpc_src_str, here, ext);
+        
+        status1 = system(clang_cmd_mpc);
+        if status1 == 0
+            fprintf('  [SUCCESS] sfun_mpc_controller.%s built successfully.\n', ext);
         else
+            fprintf('  [FALLBACK] Attempting mex command for sfun_mpc_controller...\n');
+            mex(['-I' src_dir], fullfile(here, 'sfun_mpc_controller.c'), mpc_sources{:}, '-outdir', here);
+        end
+        
+        % 2. Compile sfun_pmsm_plant
+        clang_cmd_plant = sprintf(['clang -arch %s -bundle -fPIC -O3 ' ...
+            '-I"%s/extern/include" -I"%s/simulink/include" ' ...
+            '-DMATLAB_MEX_FILE -L"%s/bin/%s" -lmx -lmex -lmat -lm ' ...
+            '-Wl,-exported_symbols_list,"%s/extern/lib/%s/mexFunction.map" ' ...
+            '"%s/sfun_pmsm_plant.c" -o "%s/sfun_pmsm_plant.%s"'], ...
+            target_arch, matlab_root, matlab_root, ...
+            matlab_root, lib_sub, matlab_root, lib_sub, ...
+            here, here, ext);
+        
+        status2 = system(clang_cmd_plant);
+        if status2 == 0
+            fprintf('  [SUCCESS] sfun_pmsm_plant.%s built successfully.\n', ext);
+        else
+            fprintf('  [FALLBACK] Attempting mex command for sfun_pmsm_plant...\n');
             mex(fullfile(here, 'sfun_pmsm_plant.c'), '-outdir', here);
         end
     else
-        mex(['-I' src_dir], fullfile(here, 'sfun_foc_controller.c'), c_sources{:}, '-outdir', here);
+        % Linux / Windows
+        mex(['-I' src_dir], fullfile(here, 'sfun_mpc_controller.c'), mpc_sources{:}, '-outdir', here);
         mex(fullfile(here, 'sfun_pmsm_plant.c'), '-outdir', here);
     end
     
-    fprintf('Build complete! All MEX binaries are ready.\n');
+    fprintf('==================================================================\n');
+    fprintf('All MEX S-Function binaries are compiled and ready.\n');
+    fprintf('==================================================================\n');
 end
