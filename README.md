@@ -1,5 +1,12 @@
 # Finite-Control-Set Model Predictive Control (FCS-MPC) with Multi-Objective Optimization for PMSM Power Electronics Inverter Drives
 
+[![CI Suite](https://github.com/arpan130781/pmsm-fcs-mpc-control/actions/workflows/ci.yml/badge.svg)](https://github.com/arpan130781/pmsm-fcs-mpc-control/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![C99](https://img.shields.io/badge/Language-C99%20%7C%20Python%203.9%2B-orange.svg)](#)
+[![MATLAB/Simulink](https://img.shields.io/badge/MATLAB%2FSimulink-R2022b%20--%20R2024a-red.svg)](simulink/)
+[![Tests](https://img.shields.io/badge/Simulink%20Tests-6%2F6%20Passed-brightgreen.svg)](#)
+[![Affiliation](https://img.shields.io/badge/Affiliation-VJTI%20Mumbai-blueviolet.svg)](#)
+
 ### Advanced Power Electronics & Embedded Motor Drive Suite | C | Python SIL | MATLAB/Simulink | ESP32 Real-Time Firmware
 **Department of Electrical Engineering, Veermata Jijabai Technological Institute (VJTI), Mumbai**  
 **Author:** Arpan Kailash Gupta  

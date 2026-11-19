@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software in your research or course projects, please cite it as below."
+authors:
+  - family-names: "Gupta"
+    given-names: "Arpan Kailash"
+    affiliation: "Department of Electrical Engineering, Veermata Jijabai Technological Institute (VJTI), Mumbai"
+title: "Finite-Control-Set Model Predictive Control (FCS-MPC) Dual-Observer PMSM Power Electronics Drive"
+version: 2.0.0
+date-released: 2026-11-18
+url: "https://github.com/arpan130781/pmsm-fcs-mpc-control"
+license: MIT

@@ -1,5 +1,5 @@
-PYTHON ?= python3
-MATLAB ?= $(shell if [ -d "/Applications/MATLAB_R2022b.app/bin" ]; then echo "/Applications/MATLAB_R2022b.app/bin/matlab"; else which matlab; fi)
+PYTHON ?= $(shell if [ -f ".venv/bin/python3" ]; then echo ".venv/bin/python3"; else which python3; fi)
+MATLAB ?= $(shell if [ -d "/Applications/MATLAB_R2024a.app/bin" ]; then echo "/Applications/MATLAB_R2024a.app/bin/matlab"; elif [ -d "/Applications/MATLAB_R2022b.app/bin" ]; then echo "/Applications/MATLAB_R2022b.app/bin/matlab"; else which matlab; fi)
 
 CC=gcc
 CFLAGS=-Wall -Wextra -O3 -fPIC
