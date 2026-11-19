@@ -7,5 +7,5 @@ authors:
 title: "Finite-Control-Set Model Predictive Control (FCS-MPC) Dual-Observer PMSM Power Electronics Drive"
 version: 2.0.0
 date-released: 2026-11-18
-url: "https://github.com/arpan130781/pmsm-fcs-mpc-control"
+url: "https://github.com/arpan130781/pmsm_fcs_mpc_control"
 license: MIT
